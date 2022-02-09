@@ -12,29 +12,9 @@ Check my_favorite_numbers_ind.
 
 Theorem favorites_below_50 : forall n, my_favorite_numbers n -> n < 50.
 Proof.
-Admitted.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  intros.
+  induct H; linear_arithmetic.
+Qed.
 
 (** * Transitive closure of relations *)
 
@@ -51,42 +31,33 @@ Definition lt' : nat -> nat -> Prop := tc oneApart.
 
 Theorem lt'_lt : forall n m, lt' n m -> n < m.
 Proof.
-Admitted.
+  intros.
+  induct H.
+  { unfold oneApart in H; linear_arithmetic. }
+  { linear_arithmetic. }
+Qed.
 
 Theorem lt_lt' : forall n m, n < m -> lt' n m.
 Proof.
-Admitted.
-
+  Admitted.
+  
 (** ** Transitive closure is idempotent. *)
 
 Theorem tc_tc2 : forall A (R : A -> A -> Prop) x y, tc R x y -> tc (tc R) x y.
 Proof.
-Admitted.
+  intros.
+  induct H.
+  { apply TcBase. apply TcBase. trivial. }
+  { apply TcTrans with (y0:=y); trivial. }
+Qed.
 
 Theorem tc2_tc : forall A (R : A -> A -> Prop) x y, tc (tc R) x y -> tc R x y.
 Proof.
-Admitted.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  intros.
+  induct H.
+  { trivial. }
+  { apply TcTrans with (y0:=y); trivial. }
+Qed.
 
 (** * Permutation *)
 
@@ -101,46 +72,96 @@ Inductive Permutation {A} : list A -> list A -> Prop :=
 | perm_trans : forall l l' l'',
     Permutation l l' -> Permutation l' l'' -> Permutation l l''.
 
+Lemma Permutation_cons : forall A (a : A) (ls : list A),
+    Permutation (a :: ls) (ls ++ [a]).
+Proof.
+  intros.
+  induct ls.
+  { simplify. apply perm_skip. apply perm_nil. }
+  { apply perm_trans with (a0 :: a :: ls).
+    apply perm_swap.
+    apply perm_skip.
+    equality. }
+Qed.
+  
 Theorem Permutation_rev : forall A (ls : list A),
     Permutation ls (rev ls).
 Proof.
-Admitted.
+  intros.
+  induct ls.
+  { simplify. apply perm_nil. }
+  { simplify.
+    apply perm_trans with (a :: rev ls).
+    apply perm_skip; trivial.
+    apply Permutation_cons. }
+Qed.
 
 Theorem Permutation_length : forall A (ls1 ls2 : list A),
     Permutation ls1 ls2 -> length ls1 = length ls2.
 Proof.
-Admitted.
+  intros.
+  induct H; simplify; try equality.
+Qed.
+
+Lemma Permutation_comm : forall A (ls1 ls2 : list A),
+    Permutation ls1 ls2 -> Permutation ls2 ls1.
+Proof.
+  intros.
+  induct H.
+  { apply perm_nil. }
+  { apply perm_skip. assumption. }
+  { apply perm_swap. }
+  { apply perm_trans with (l'0 := l'); assumption. }
+Qed.
+
+Lemma Permutation_refl : forall A (ls : list A),
+    Permutation ls ls.
+Proof.
+  intros.
+  induct ls; simplify; try (apply perm_nil).
+  { apply perm_skip. apply IHls. }
+Qed.
+
+Lemma Permutation_app1 : forall A (l ls1 ls2 : list A),
+    Permutation ls1 ls2
+    -> Permutation (ls1 ++ l) (ls2 ++ l).
+Proof.
+  intros.
+  induct H; simplify; try equality.
+  { apply Permutation_refl. }
+  { apply perm_skip. assumption. }
+  { apply perm_swap. }
+  { apply perm_trans with (l'0 := l' ++ l); trivial. }
+Qed.
+
+Lemma Permutation_app2 : forall A (l ls1 ls2 : list A),
+    Permutation ls1 ls2
+    -> Permutation (l ++ ls1) (l ++ ls2).
+Proof.
+  intros.
+  induct l; simplify; try equality.
+  { apply perm_skip. apply IHl; trivial. }
+Qed.
 
 Theorem Permutation_app : forall A (ls1 ls1' ls2 ls2' : list A),
     Permutation ls1 ls1'
     -> Permutation ls2 ls2'
     -> Permutation (ls1 ++ ls2) (ls1' ++ ls2').
 Proof.
-Admitted.
+  intros.
+  induct H; simplify; try equality.
+  { apply perm_skip.
+    apply IHPermutation.
+    apply H0. }
+  { apply perm_trans with (y :: x :: l ++ ls2').
+    apply perm_skip. apply perm_skip.
+    apply Permutation_app2; trivial.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    apply perm_swap. }
+  { apply perm_trans with (l' ++ ls2').
+    apply IHPermutation1; trivial.
+    apply Permutation_app1; trivial. }
+Qed.
 
 (** * Simple propositional logic *)
 
@@ -174,11 +195,39 @@ Fixpoint interp (p : prop) : Prop :=
 
 Theorem interp_valid : forall p, interp p -> valid p.
 Proof.
-Admitted.
+  intros.
+  induct p; simplify.
+  { apply ValidTruth. }
+  { linear_arithmetic. }
+  { apply ValidAnd. 
+    apply IHp1.
+    apply H.
+    apply IHp2.
+    apply H. }
+  { cases H.
+    { apply ValidOr1. apply IHp1; trivial. }
+    { apply ValidOr2. apply IHp2; trivial. }
+  }
+Qed.
 
 Theorem valid_interp : forall p, valid p -> interp p.
 Proof.
-Admitted.
+  intros.
+  induct p; simplify.
+  { equality. }
+  { invert H. }
+  { invert H.
+    { apply IHp1 in H2.
+      apply IHp2 in H3.
+      equality. }
+  }
+  { invert H.
+    { apply IHp1 in H1.
+      equality. }
+    { apply IHp2 in H1.
+      equality. }
+  }
+Qed.
 
 Fixpoint commuter (p : prop) : prop :=
   match p with
@@ -190,47 +239,35 @@ Fixpoint commuter (p : prop) : prop :=
 
 Theorem valid_commuter_fwd : forall p, valid p -> valid (commuter p).
 Proof.
-Admitted.
+  intros.
+  induct p; simplify; try equality.
+  { invert H.
+    apply ValidAnd.
+    apply IHp2; trivial.
+    apply IHp1; trivial. }
+  { invert H.
+    apply ValidOr2.
+    apply IHp1; trivial.
+    apply ValidOr1.
+    apply IHp2; trivial. }
+Qed.
 
 Theorem valid_commuter_bwd : forall p, valid (commuter p) -> valid p.
 Proof.
-Admitted.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  intros p.
+  induct p; simplify.
+  { apply ValidTruth. }
+  { invert H. }
+  { invert H.
+    apply ValidAnd.
+    apply IHp1; trivial.
+    apply IHp2; trivial. }
+  { invert H.
+    apply ValidOr2.
+    apply IHp2; trivial.
+    apply ValidOr1.
+    apply IHp1; trivial. }
+Qed.
 
 (* Proofs for an extension I hope we'll get to:
 
