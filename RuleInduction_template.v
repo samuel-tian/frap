@@ -37,9 +37,51 @@ Proof.
   { linear_arithmetic. }
 Qed.
 
+Lemma lt_lt'_O : forall m, 0 < m -> lt' 0 m.
+Proof.
+  intros.
+  induct m; simplify.
+  { invert H. }
+  { cases m.
+    { unfold lt'.
+      apply TcBase.
+      unfold oneApart.
+      linear_arithmetic.
+    }
+    { assert (0 < S m).
+      linear_arithmetic.
+      apply IHm in H0.
+      apply TcTrans with (y := S m).
+      apply H0.
+      apply TcBase.
+      unfold oneApart.
+      linear_arithmetic.
+    }
+  }
+Qed.
+
+Lemma lt_lt'' : forall n k, lt' n (S k + n).
+Proof.
+  intros.
+  induct k; simplify.
+  { unfold lt'.
+    apply TcBase.
+    unfold oneApart.
+    linear_arithmetic. }
+  { apply TcTrans with (y := S (k + n)); trivial.
+    unfold lt'.
+    apply TcBase.
+    unfold oneApart.
+    linear_arithmetic. }
+Qed.
+
 Theorem lt_lt' : forall n m, n < m -> lt' n m.
 Proof.
-  Admitted.
+  intros.
+  replace m with (S (m - n - 1) + n).
+  apply lt_lt''.
+  linear_arithmetic.
+Qed.
   
 (** ** Transitive closure is idempotent. *)
 
