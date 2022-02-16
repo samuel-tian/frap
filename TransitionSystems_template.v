@@ -57,7 +57,8 @@ Notation "R ^*" := (trc R) (at level 0).
 (* Now let's use it to execute the factorial program. *)
 Example factorial_3 : fact_step^* (WithAccumulator 3 1) (AnswerIs 6).
 Proof.
-Admitted.
+  repeat econstructor.
+Qed.
 
 (* It will be useful to give state machines more first-class status, as
  * *transition systems*, formalized by this record type.  It has one type
@@ -97,7 +98,7 @@ Lemma use_invariant' : forall {state} (sys : trsys state)
   invariantFor sys invariant
   -> sys.(Initial) s
   -> sys.(Step)^* s s'
-  -> invariant s'.
+  -> invariant s'.  
 Proof.
   unfold invariantFor.
   simplify.
@@ -153,13 +154,20 @@ Proof.
 Qed.
 
 Definition fact_invariant (original_input : nat) (st : fact_state) : Prop :=
-  True.
+  match st with
+  | AnswerIs ans => fact original_input = ans
+  | WithAccumulator n acc => fact original_input = fact n * acc
+  end.
 (* We must fill in a better invariant. *)
 
 Theorem fact_invariant_ok : forall original_input,
   invariantFor (factorial_sys original_input) (fact_invariant original_input).
 Proof.
-Admitted.
+  intros.
+  apply invariant_induction; simplify.
+  invert H; simplify; linear_arithmetic.
+  invert H0; simplify; linear_arithmetic.
+Qed.
 
 (* Therefore, every reachable state satisfies this invariant. *)
 Theorem fact_invariant_always : forall original_input s,
@@ -177,7 +185,13 @@ Lemma fact_ok' : forall original_input s,
   fact_final s
   -> fact_invariant original_input s
   -> s = AnswerIs (fact original_input).
-Admitted.
+Proof.
+  intros.
+  invert H.
+  f_equal.
+  simplify.
+  equality.
+Qed.
 
 Theorem fact_ok : forall original_input s,
   reachable (factorial_sys original_input) s
@@ -310,16 +324,70 @@ Definition increment2_sys := parallel increment_sys increment_sys.
 (* Let's prove that the counter is always 2 when the composed program terminates. *)
 
 (** We must write an invariant. *)
+
+Definition contribution_from (pr : increment_program) : nat :=
+  match pr with
+  | Unlock => 1
+  | Done => 1
+  | _ => 0
+  end.
+
+Definition has_lock (pr : increment_program) : bool :=
+  match pr with
+  | Read => true
+  | Write _ => true
+  | Unlock => true
+  | _ => false
+  end.
+
+Definition shared_from_private (pr1 pr2 : increment_program) :=
+  {| Locked := has_lock pr1 || has_lock pr2;
+    Global := contribution_from pr1 + contribution_from pr2 |}.
+
+Definition instruction_ok (self other : increment_program) :=
+  match self with
+  | Lock => True
+  | Read => has_lock other = false
+  | Write n => has_lock other = false /\ n = contribution_from other
+  | Unlock => has_lock other = false
+  | Done => True
+  end.
+
 Inductive increment2_invariant :
   threaded_state inc_state (increment_program * increment_program) -> Prop :=
-| Inc2Inv : forall sh pr1 pr2,
-  increment2_invariant {| Shared := sh; Private := (pr1, pr2) |}.
-(* This isn't it yet! *)
+| Inc2Inv : forall pr1 pr2,
+    instruction_ok pr1 pr2
+    -> instruction_ok pr2 pr1
+    -> increment2_invariant {| Shared := shared_from_private pr1 pr2;
+                             Private := (pr1, pr2) |}.
 
 (* Now, to show it really is an invariant. *)
+
+Lemma Inc2Inv' : forall sh pr1 pr2,
+    sh = shared_from_private pr1 pr2
+    -> instruction_ok pr1 pr2
+    -> instruction_ok pr2 pr1
+    -> increment2_invariant {| Shared := sh; Private := (pr1, pr2) |}.
+Proof.
+  intros.
+  rewrite H.
+  apply Inc2Inv.
+  assumption.
+  assumption.
+Qed.
+  
 Theorem increment2_invariant_ok : invariantFor increment2_sys increment2_invariant.
 Proof.
-Admitted.
+  apply invariant_induction; simplify;
+  repeat match goal with
+         | [ H : increment2_invariant _ |- _ ] => invert H
+         | [ H : parallel_init _ _ _ |- _ ] => invert H
+         | [ H : increment_init _ |- _ ] => invert H
+         | [ H : parallel_step _ _ _ _ |- _ ] => invert H
+         | [ H : increment_step _ _ |- _ ] => invert H
+         | [ pr : increment_program |- _ ] => cases pr; simplify
+         end; try equality;
+  apply Inc2Inv'; unfold shared_from_private; simplify; equality.
 
 (* Now, to prove our final result about the two incrementing threads, let's use
  * a more general fact, about when one invariant implies another. *)

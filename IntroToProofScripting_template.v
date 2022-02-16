@@ -5,6 +5,11 @@ Set Implicit Arguments.
 
 (** * Ltac Programming Basics *)
 
+Ltac find_if :=
+  match goal with
+  | [ |- if ?x then _ else _] => cases x
+  end.
+
 Theorem hmm : forall (a b c : bool),
   if a
     then if b
@@ -14,13 +19,20 @@ Theorem hmm : forall (a b c : bool),
       then True
       else True.
 Proof.
-Admitted.
+  simplify.
+  repeat find_if; trivial.
+Qed.
+
+Ltac find_if_inside :=
+  match goal with
+  | [ |- context[if ?x then _ else _] ] => cases x
+  end.
 
 Theorem hmm2 : forall (a b : bool),
   (if a then 42 else 42) = (if b then 42 else 42).
 Proof.
-Admitted.
-
+  simplify; repeat find_if_inside; trivial.
+Qed.
 
 (** * Automating the two-thread locked-increment example from TransitionSystems *)
 
@@ -161,8 +173,19 @@ Qed.
 
 Theorem increment2_invariant_ok : invariantFor increment2_sys increment2_invariant.
 Proof.
-Admitted.
-
+  apply invariant_induction; simplify;
+  repeat match goal with
+         | [ H : parallel1 _ _ _ |- _ ] => invert H
+         | [ H : parallel2 _ _ _ _ |- _ ] => invert H
+         | [ H : increment_init _ |- _ ] => invert H
+         | [ H : increment_step _ _ |- _ ] => invert H
+         | [ H : increment2_invariant _ |- _ ] => invert H
+         | [ H : instruction_ok ?pr _ |- _ ] => cases pr; simplify
+         | [ |- context[shared_from_private _ _ ] ] => unfold shared_from_private
+         | [ |- increment2_invariant _ ] => apply Inc2Inv'
+         end;
+    simplify; try equality.
+Qed.
 
 (** * Implementing some of [propositional] ourselves *)
 
@@ -174,12 +197,26 @@ Locate "\/".
 Print or.
 (* Implication ([->]) is built into Coq, so nothing to look up there. *)
 
+Ltac my_tauto :=
+  repeat match goal with
+         | [ |- True ] => constructor
+         | [ H : False |- _ ] => cases H
+         | [ H : ?P |- ?P ] => exact H
+         | [ |- _ /\ _ ] => split
+         | [ H : _ /\ _ |- _ ] => cases H
+         | [ H : _ \/ _ |- _ ] => cases H
+         | [ H1 : ?P, H2 : ?P -> ?Q |- _ ] => specialize (H2 H1)
+         | [ |- _ -> _ ] => intro
+         end.
+
 Section propositional.
   Variables P Q R : Prop.
 
   Theorem propositional : (P \/ Q \/ False) /\ (P -> Q) -> True /\ Q.
   Proof.
-  Admitted.
+    my_tauto.
+  Qed.
+
 End propositional.
 
 (* Backtracking example #1 *)
@@ -199,21 +236,52 @@ Proof.
   intros; match goal with
             | [ H : _ |- _ ] => idtac H
           end.
-Admitted.
+  repeat match goal with
+         | [ H : _ |- _ ] => idtac H; exact H
+         end.
+Qed.
 
 (* Let's try some more ambitious reasoning, with quantifiers.  We'll be
  * instantiating quantified facts heuristically.  If we're not careful, we get
  * in a loop repeating the same instantiation forever. *)
 
 (* Spec: ensure that [P] doesn't follow trivially from hypotheses. *)
-Ltac notHyp P := idtac.
+Ltac notHyp P :=
+  match goal with
+  | [ _ : P |- _ ] => fail 1
+  (* A hypothesis already asserts this fact. *)
+  | _ =>
+      match P with
+      | ?P1 /\ ?P2 =>
+          (* Check each conjunct of [P] separately, since they might be known by
+           * different means. *)
+          first [ notHyp P1 | notHyp P2 | fail 2 ]
+      | _ => idtac
+      (* If we manage to get this far, then we found no redundancy, so
+       * declare success. *)
+      end
+  end.
 
 (* Spec: add [pf] as hypothesis only if it doesn't already follow trivially. *)
-Ltac extend pf := idtac.
+Ltac extend pf :=
+  let t := type of pf in
+  notHyp t; pose proof pf.
 
 (* Spec: add all simple consequences of known facts, including
  * [forall]-quantified. *)
-Ltac completer := idtac.
+Ltac completer :=
+  repeat match goal with
+	 | [ H : _ /\ _ |- _ ] => cases H
+         | [ H : ?P -> ?Q, H' : ?P |- _ ] => specialize (H H')
+
+         | [ H : forall x, ?P x -> _, H' : ?P ?X |- _ ] => extend (H X H')
+
+         | [ |- _ /\ _ ] => constructor
+         | [ |- forall x, _ ] => intro
+         | [ |- _ -> _ ] => intro
+         (* Interestingly, the last rule is redundant with the second-last.
+          * See CPDT for details.... *)
+         end.
 
 Section firstorder.
   Variable A : Set.
@@ -224,14 +292,23 @@ Section firstorder.
 
   Theorem fo : forall (y x : A), P x -> S x.
   Proof.
-  Admitted.
+    completer.
+    assumption.
+  Qed.
 End firstorder.
 
 
 (** * Functional Programming in Ltac *)
 
 (* Spec: return length of list. *)
-Ltac length ls := constr:(0).
+
+Ltac length ls :=
+  match ls with
+  | nil => O
+  | _ :: ?ls' =>
+      let ls'' := length ls' in
+      constr:(S ls'')
+  end.
 
 Goal False.
   let n := length (1 :: 2 :: 3 :: nil) in
@@ -239,11 +316,20 @@ Goal False.
 Abort.
 
 (* Spec: map Ltac function over list. *)
-Ltac map f ls := constr:(0).
+Ltac map T f :=
+  let rec map' ls :=
+    match ls with
+    | nil => constr:(@nil T)
+    | ?x :: ?ls' =>
+        let x' := f x in
+        let ls'' := map' ls' in
+        constr:(x' :: ls'')
+    end in
+  map'.
 
 Goal False.
-  (*let ls := map (nat * nat)%type ltac:(fun x => constr:((x, x))) (1 :: 2 :: 3 :: nil) in
-    pose ls.*)
+  let ls := map (nat * nat)%type ltac:(fun x => constr:((x, x))) (1 :: 2 :: 3 :: nil) in
+  pose ls.
 Abort.
 
 (* Now let's revisit [length] and see how we might implement "printf debugging"
