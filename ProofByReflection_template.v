@@ -13,25 +13,42 @@ Inductive isEven : nat -> Prop :=
 
 Theorem even_256 : isEven 256.
 Proof.
-Admitted.
+  repeat constructor.
+Qed.
 
+Fixpoint check_even (n : nat) : bool :=
+  match n with
+  | 0 => true
+  | 1 => false
+  | S (S n') => check_even n'
+  end.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+Lemma check_even_ok : forall n n',
+    n' < n ->
+    if check_even n' then
+      isEven n' else
+      ~(isEven n').
+Proof.
+  intros.
+  induct n; simplify.
+  { linear_arithmetic. }
+  { cases n'; simplify.
+    constructor.
+    cases n'; simplify.
+    propositional.
+    invert H0.
+    specialize (IHn n').
+    cases (check_even n'); simplify.
+    { constructor.
+      apply IHn.
+      linear_arithmetic. }
+    { propositional.
+      invert H0.
+      apply IHn.
+      linear_arithmetic.
+      assumption. }
+  }
+Qed.
 
 (** * Reifying the Syntax of a Trivial Tautology Language *)
 
@@ -85,9 +102,9 @@ Section monoid.
 
   Fixpoint mdenote (me : mexp) : A :=
     match me with
-      | Ident => e
-      | Var v => v
-      | Op me1 me2 => mdenote me1 + mdenote me2
+    | Ident => e
+    | Var v => v
+    | Op me1 me2 => mdenote me1 + mdenote me2
     end.
 
 
@@ -122,15 +139,15 @@ Section monoid.
 
   Ltac reify me :=
     match me with
-      | e => Ident
-      | ?me1 + ?me2 =>
+    | e => Ident
+    | ?me1 + ?me2 =>
         let r1 := reify me1 in
         let r2 := reify me2 in
-          constr:(Op r1 r2)
-      | _ => constr:(Var me)
+        constr:(Op r1 r2)
+    | _ => constr:(Var me)
     end.
 
-  (*Ltac monoid :=
+(*Ltac monoid :=
     match goal with
       | [ |- ?me1 = ?me2 ] =>
         let r1 := reify me1 in
@@ -159,9 +176,9 @@ Inductive subtract_step : nat -> nat -> Prop :=
 | Subtract2 : forall n, subtract_step (S (S n)) n.
 
 Definition subtract_sys (n : nat) : trsys nat := {|
-  Initial := {n};
-  Step := subtract_step
-|}.
+                                              Initial := {n};
+                                              Step := subtract_step
+                                            |}.
 
 Lemma subtract_ok :
   invariantFor (subtract_sys 5)
@@ -183,9 +200,9 @@ Proof.
   (* Ew.  What a big, ugly set expression.  Let's shrink it down to something
    * more readable, with duplicates removed, etc. *)
   simplify.
-  (* How does the Frap library do that?  Proof by reflection is a big part of
-   * it!  Let's develop a baby version of that automation.  The full-scale
-   * version is in file Sets.v. *)
+(* How does the Frap library do that?  Proof by reflection is a big part of
+ * it!  Let's develop a baby version of that automation.  The full-scale
+ * version is in file Sets.v. *)
 Abort.
 
 
@@ -265,12 +282,12 @@ Definition asgn := nat -> Prop.
 
 Fixpoint formulaDenote (atomics : asgn) (f : formula) : Prop :=
   match f with
-    | Atomic v => atomics v
-    | Truth => True
-    | Falsehood => False
-    | And f1 f2 => formulaDenote atomics f1 /\ formulaDenote atomics f2
-    | Or f1 f2 => formulaDenote atomics f1 \/ formulaDenote atomics f2
-    | Imp f1 f2 => formulaDenote atomics f1 -> formulaDenote atomics f2
+  | Atomic v => atomics v
+  | Truth => True
+  | Falsehood => False
+  | And f1 f2 => formulaDenote atomics f1 /\ formulaDenote atomics f2
+  | Or f1 f2 => formulaDenote atomics f1 \/ formulaDenote atomics f2
+  | Imp f1 f2 => formulaDenote atomics f1 -> formulaDenote atomics f2
   end.
 
 Require Import ListSet.
@@ -282,25 +299,25 @@ Section my_tauto.
 
   Fixpoint allTrue (s : set propvar) : Prop :=
     match s with
-      | nil => True
-      | v :: s' => atomics v /\ allTrue s'
+    | nil => True
+    | v :: s' => atomics v /\ allTrue s'
     end.
 
   Theorem allTrue_add : forall v s,
-    allTrue s
-    -> atomics v
-    -> allTrue (add s v).
+      allTrue s
+      -> atomics v
+      -> allTrue (add s v).
   Proof.
     induct s; simplify; propositional;
       match goal with
-        | [ |- context[if ?E then _ else _] ] => destruct E
+      | [ |- context[if ?E then _ else _] ] => destruct E
       end; simplify; propositional.
   Qed.
 
   Theorem allTrue_In : forall v s,
-    allTrue s
-    -> set_In v s
-    -> atomics v.
+      allTrue s
+      -> set_In v s
+      -> atomics v.
   Proof.
     induct s; simplify; equality.
   Qed.
@@ -312,7 +329,7 @@ Section my_tauto.
     | Truth => cont known
     | Falsehood => true
     | And h1 h2 => forward known h1 (fun known' =>
-                     forward known' h2 cont)
+                                      forward known' h2 cont)
     | Or h1 h2 => forward known h1 cont && forward known h2 cont
     | Imp _ _ => cont known
     end.
@@ -343,8 +360,8 @@ End my_tauto.
 Lemma forward_ok : forall atomics hyp f known cont,
     forward known hyp cont = true
     -> (forall known', allTrue atomics known'
-                       -> cont known' = true
-                       -> formulaDenote atomics f)
+                 -> cont known' = true
+                 -> formulaDenote atomics f)
     -> allTrue atomics known
     -> formulaDenote atomics hyp
     -> formulaDenote atomics f.
@@ -450,11 +467,11 @@ Ltac position x ls :=
   | [] => constr:(@None nat)
   | x :: _ => constr:(Some 0)
   | _ :: ?ls' =>
-    let p := position x ls' in
-    match p with
-    | None => p
-    | Some ?n => constr:(Some (S n))
-    end
+      let p := position x ls' in
+      match p with
+      | None => p
+      | Some ?n => constr:(Some (S n))
+      end
   end.
 
 (* Compute a duplicate-free list of all variables in [P], combining it with
@@ -464,20 +481,20 @@ Ltac vars_in P acc :=
   | True => acc
   | False => acc
   | ?Q1 /\ ?Q2 =>
-    let acc' := vars_in Q1 acc in
-    vars_in Q2 acc'
+      let acc' := vars_in Q1 acc in
+      vars_in Q2 acc'
   | ?Q1 \/ ?Q2 =>
-    let acc' := vars_in Q1 acc in
-    vars_in Q2 acc'
+      let acc' := vars_in Q1 acc in
+      vars_in Q2 acc'
   | ?Q1 -> ?Q2 =>
-    let acc' := vars_in Q1 acc in
-    vars_in Q2 acc'
+      let acc' := vars_in Q1 acc in
+      vars_in Q2 acc'
   | _ =>
-    let pos := position P acc in
-    match pos with
-    | Some _ => acc
-    | None => constr:(P :: acc)
-    end
+      let pos := position P acc in
+      match pos with
+      | Some _ => acc
+      | None => constr:(P :: acc)
+      end
   end.
 
 (* Reification of formula [P], with a pregenerated list [vars] of variables it
@@ -487,22 +504,22 @@ Ltac reify_tauto' P vars :=
   | True => Truth
   | False => Falsehood
   | ?Q1 /\ ?Q2 =>
-    let q1 := reify_tauto' Q1 vars in
-    let q2 := reify_tauto' Q2 vars in
-    constr:(And q1 q2)
+      let q1 := reify_tauto' Q1 vars in
+      let q2 := reify_tauto' Q2 vars in
+      constr:(And q1 q2)
   | ?Q1 \/ ?Q2 =>
-    let q1 := reify_tauto' Q1 vars in
-    let q2 := reify_tauto' Q2 vars in
-    constr:(Or q1 q2)
+      let q1 := reify_tauto' Q1 vars in
+      let q2 := reify_tauto' Q2 vars in
+      constr:(Or q1 q2)
   | ?Q1 -> ?Q2 =>
-    let q1 := reify_tauto' Q1 vars in
-    let q2 := reify_tauto' Q2 vars in
-    constr:(Imp q1 q2)
+      let q1 := reify_tauto' Q1 vars in
+      let q2 := reify_tauto' Q2 vars in
+      constr:(Imp q1 q2)
   | _ =>
-    let pos := position P vars in
-    match pos with
-    | Some ?pos' => constr:(Atomic pos')
-    end
+      let pos := position P vars in
+      match pos with
+      | Some ?pos' => constr:(Atomic pos')
+      end
   end.
 
 (* Our final tactic implementation is now fairly straightforward.  First, we
@@ -511,14 +528,14 @@ Ltac reify_tauto' P vars :=
 
 Ltac my_tauto :=
   repeat match goal with
-           | [ |- forall x : ?P, _ ] =>
+         | [ |- forall x : ?P, _ ] =>
              match type of P with
-               | Prop => fail 1
-               | _ => intro
+             | Prop => fail 1
+             | _ => intro
              end
          end;
   match goal with
-    | [ |- ?P ] =>
+  | [ |- ?P ] =>
       let vars := vars_in P (@nil Prop) in
       let p := reify_tauto' P vars in
       change (formulaDenote (nth_default False vars) p)
@@ -542,8 +559,8 @@ Qed.
 Print mt2.
 
 Theorem mt3 : forall x y z,
-  (x < y /\ y > z) \/ (y > z /\ x < S y)
-  -> y > z /\ (x < y \/ x < S y).
+    (x < y /\ y > z) \/ (y > z /\ x < S y)
+    -> y > z /\ (x < y \/ x < S y).
 Proof.
   my_tauto.
 Qed.
